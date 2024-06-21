@@ -36,3 +36,9 @@ jobs:
         file: ./apps/playwright-service/Dockerfile
         push: true
         tags: ghcr.io/${{ env.REPO_NAME }}/${{ env.PROJECT_NAME }}:latest
+
+
+
+
+
+
