@@ -1,4 +1,4 @@
-name: Docker Image CI
+name: Docker FireCrawl API Push
 
 on:
   push:
