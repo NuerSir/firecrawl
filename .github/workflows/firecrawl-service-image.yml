@@ -1,5 +1,4 @@
-name: Docker Image CI
-
+name: Docker FireCrawl Push
 on:
   push:
     branches: [ "main" ]
@@ -35,4 +34,5 @@ jobs:
         context: ./apps/playwright-service
         file: ./apps/playwright-service/Dockerfile
         push: true
+        platforms: linux/amd64,linux/arm64
         tags: ghcr.io/${{ env.REPO_NAME }}/${{ env.PROJECT_NAME }}:latest
