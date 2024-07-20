@@ -3,12 +3,15 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import "dotenv/config";
 import { getWebScraperQueue } from "./services/queue-service";
-import { redisClient } from "./services/rate-limiter";
 import { v0Router } from "./routes/v0";
 import { initSDK } from "@hyperdx/node-opentelemetry";
 import cluster from "cluster";
 import os from "os";
 import { Job } from "bull";
+import { sendSlackWebhook } from "./services/alerts/slack";
+import { checkAlerts } from "./services/alerts";
+import Redis from "ioredis";
+import { redisRateLimitClient } from "./services/rate-limiter";
 
 const { createBullBoard } = require("@bull-board/api");
 const { BullAdapter } = require("@bull-board/api/bullAdapter");
@@ -26,9 +29,11 @@ if (cluster.isMaster) {
   }
 
   cluster.on("exit", (worker, code, signal) => {
-    console.log(`Worker ${worker.process.pid} exited`);
-    console.log("Starting a new worker");
-    cluster.fork();
+    if (code !== null) {
+      console.log(`Worker ${worker.process.pid} exited`);
+      console.log("Starting a new worker");
+      cluster.fork();
+    }
   });
 } else {
   const app = express();
@@ -39,6 +44,7 @@ if (cluster.isMaster) {
   app.use(bodyParser.json({ limit: "10mb" }));
 
   app.use(cors()); // Add this line to enable CORS
+
 
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath(`/admin/${process.env.BULL_AUTH_KEY}/queues`);
@@ -67,7 +73,6 @@ if (cluster.isMaster) {
 
   const DEFAULT_PORT = process.env.PORT ?? 3002;
   const HOST = process.env.HOST ?? "localhost";
-  redisClient.connect();
 
   // HyperDX OpenTelemetry
   if (process.env.ENV === "production") {
@@ -97,6 +102,7 @@ if (cluster.isMaster) {
   app.get(`/admin/${process.env.BULL_AUTH_KEY}/queues`, async (req, res) => {
     try {
       const webScraperQueue = getWebScraperQueue();
+
       const [webScraperActive] = await Promise.all([
         webScraperQueue.getActiveCount(),
       ]);
@@ -186,6 +192,19 @@ if (cluster.isMaster) {
   });
 
   app.get(
+    `/admin/${process.env.BULL_AUTH_KEY}/check-queues`,
+    async (req, res) => {
+      try {
+        await checkAlerts();
+        return res.status(200).send("Alerts initialized");
+      } catch (error) {
+        console.error("Failed to initialize alerts:", error);
+        return res.status(500).send("Failed to initialize alerts");
+      }
+    }
+  );
+
+  app.get(
     `/admin/${process.env.BULL_AUTH_KEY}/clean-before-24h-complete-jobs`,
     async (req, res) => {
       try {
@@ -194,27 +213,32 @@ if (cluster.isMaster) {
         const numberOfBatches = 9; // Adjust based on your needs
         const completedJobsPromises: Promise<Job[]>[] = [];
         for (let i = 0; i < numberOfBatches; i++) {
-          completedJobsPromises.push(webScraperQueue.getJobs(
-            ["completed"],
-            i * batchSize,
-            i * batchSize + batchSize,
-            true
-          ));
+          completedJobsPromises.push(
+            webScraperQueue.getJobs(
+              ["completed"],
+              i * batchSize,
+              i * batchSize + batchSize,
+              true
+            )
+          );
         }
-        const completedJobs: Job[] = (await Promise.all(completedJobsPromises)).flat();
-        const before24hJobs = completedJobs.filter(
-          (job) => job.finishedOn < Date.now() - 24 * 60 * 60 * 1000
-        ) || [];
-        
+        const completedJobs: Job[] = (
+          await Promise.all(completedJobsPromises)
+        ).flat();
+        const before24hJobs =
+          completedJobs.filter(
+            (job) => job.finishedOn < Date.now() - 24 * 60 * 60 * 1000
+          ) || [];
+
         let count = 0;
-        
+
         if (!before24hJobs) {
           return res.status(200).send(`No jobs to remove.`);
         }
 
         for (const job of before24hJobs) {
           try {
-            await job.remove()
+            await job.remove();
             count++;
           } catch (jobError) {
             console.error(`Failed to remove job with ID ${job.id}:`, jobError);
@@ -231,6 +255,76 @@ if (cluster.isMaster) {
   app.get("/is-production", (req, res) => {
     res.send({ isProduction: global.isProduction });
   });
+
+  app.get(
+    `/admin/${process.env.BULL_AUTH_KEY}/redis-health`,
+    async (req, res) => {
+      try {
+  const queueRedis = new Redis(process.env.REDIS_URL);
+
+        const testKey = "test";
+        const testValue = "test";
+
+        // Test queueRedis
+        let queueRedisHealth;
+        try {
+          await queueRedis.set(testKey, testValue);
+          queueRedisHealth = await queueRedis.get(testKey);
+          await queueRedis.del(testKey);
+        } catch (error) {
+          console.error("queueRedis health check failed:", error);
+          queueRedisHealth = null;
+        }
+
+        // Test redisRateLimitClient
+        let redisRateLimitHealth;
+        try {
+          await redisRateLimitClient.set(testKey, testValue);
+          redisRateLimitHealth = await redisRateLimitClient.get(testKey);
+          await redisRateLimitClient.del(testKey);
+        } catch (error) {
+          console.error("redisRateLimitClient health check failed:", error);
+          redisRateLimitHealth = null;
+        }
+
+        const healthStatus = {
+          queueRedis: queueRedisHealth === testValue ? "healthy" : "unhealthy",
+          redisRateLimitClient:
+            redisRateLimitHealth === testValue ? "healthy" : "unhealthy",
+        };
+
+        if (
+          healthStatus.queueRedis === "healthy" &&
+          healthStatus.redisRateLimitClient === "healthy"
+        ) {
+          console.log("Both Redis instances are healthy");
+          return res
+            .status(200)
+            .json({ status: "healthy", details: healthStatus });
+        } else {
+          console.log("Redis instances health check:", healthStatus);
+          await sendSlackWebhook(
+            `[REDIS DOWN] Redis instances health check: ${JSON.stringify(
+              healthStatus
+            )}`,
+            true
+          );
+          return res
+            .status(500)
+            .json({ status: "unhealthy", details: healthStatus });
+        }
+      } catch (error) {
+        console.error("Redis health check failed:", error);
+        await sendSlackWebhook(
+          `[REDIS DOWN] Redis instances health check: ${error.message}`,
+          true
+        );
+        return res
+          .status(500)
+          .json({ status: "unhealthy", message: error.message });
+      }
+    }
+  );
 
   console.log(`Worker ${process.pid} started`);
 }

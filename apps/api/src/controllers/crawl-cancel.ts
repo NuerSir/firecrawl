@@ -8,6 +8,8 @@ import { billTeam } from "../../src/services/billing/credit_billing";
 
 export async function crawlCancelController(req: Request, res: Response) {
   try {
+    const useDbAuthentication = process.env.USE_DB_AUTHENTICATION === 'true';
+
     const { success, team_id, error, status } = await authenticateUser(
       req,
       res,
@@ -22,18 +24,21 @@ export async function crawlCancelController(req: Request, res: Response) {
     }
 
     // check if the job belongs to the team
-    const { data, error: supaError } = await supabase_service
-      .from("bulljobs_teams")
-      .select("*")
-      .eq("job_id", req.params.jobId)
-      .eq("team_id", team_id);
-    if (supaError) {
-      return res.status(500).json({ error: supaError.message });
+    if (useDbAuthentication) {
+      const { data, error: supaError } = await supabase_service
+        .from("bulljobs_teams")
+        .select("*")
+        .eq("job_id", req.params.jobId)
+        .eq("team_id", team_id);
+      if (supaError) {
+        return res.status(500).json({ error: supaError.message });
+      }
+
+      if (data.length === 0) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
     }
 
-    if (data.length === 0) {
-      return res.status(403).json({ error: "Unauthorized" });
-    }
     const jobState = await job.getState();
     const { partialDocs } = await job.progress();
 
@@ -45,6 +50,9 @@ export async function crawlCancelController(req: Request, res: Response) {
     }
 
     try {
+      await getWebScraperQueue().client.del(job.lockKey());
+      await job.takeLock();
+      await job.discard();
       await job.moveToFailed(Error("Job cancelled by user"), true);
     } catch (error) {
       console.error(error);
@@ -53,7 +61,7 @@ export async function crawlCancelController(req: Request, res: Response) {
     const newJobState = await job.getState();
 
     res.json({
-      status: newJobState === "failed" ? "cancelled" : "Cancelling...",
+      status: "cancelled"
     });
   } catch (error) {
     console.error(error);

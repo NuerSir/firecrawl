@@ -58,11 +58,19 @@ export async function scrapeHelper(
   }
 
   // make sure doc.content is not empty
-  const filteredDocs = docs.filter(
+  let filteredDocs = docs.filter(
     (doc: { content?: string }) => doc.content && doc.content.trim().length > 0
   );
   if (filteredDocs.length === 0) {
     return { success: true, error: "No page found", returnCode: 200, data: docs[0] };
+  }
+
+ 
+  // Remove rawHtml if pageOptions.rawHtml is false and extractorOptions.mode is llm-extraction-from-raw-html
+  if (!pageOptions.includeRawHtml && extractorOptions.mode == "llm-extraction-from-raw-html") {
+    filteredDocs.forEach(doc => {
+      delete doc.rawHtml;
+    });
   }
 
   let creditsToBeBilled = filteredDocs.length;
@@ -70,7 +78,7 @@ export async function scrapeHelper(
 
 
 
-  if (extractorOptions.mode === "llm-extraction") {
+  if (extractorOptions.mode === "llm-extraction" || extractorOptions.mode === "llm-extraction-from-raw-html" || extractorOptions.mode === "llm-extraction-from-markdown") {
     creditsToBeBilled = creditsToBeBilled + (creditsPerLLMExtract * filteredDocs.length);
   }
 
@@ -108,11 +116,14 @@ export async function scrapeController(req: Request, res: Response) {
     const crawlerOptions = req.body.crawlerOptions ?? {};
     const pageOptions = { ...defaultPageOptions, ...req.body.pageOptions };
     const extractorOptions = { ...defaultExtractorOptions, ...req.body.extractorOptions };
+    const origin = req.body.origin ?? defaultOrigin;
+    let timeout = req.body.timeout ?? defaultTimeout;
+
     if (extractorOptions.mode === "llm-extraction") {
       pageOptions.onlyMainContent = true;
+      timeout = req.body.timeout ?? 90000;
     }
-    const origin = req.body.origin ?? defaultOrigin;
-    const timeout = req.body.timeout ?? defaultTimeout;
+    
 
     try {
       const { success: creditsCheckSuccess, message: creditsCheckMessage } =
