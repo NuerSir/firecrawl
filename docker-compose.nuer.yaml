@@ -1,8 +1,9 @@
 name: firecrawl
 
 x-common-service: &common-service
-  build: apps/api
-  image: firecrawl-svr
+  # build: apps/api
+  # image: firecrawl-svr
+  image: ghcr.io/nuersir/firecrawl-svr
   # networks:
   #   - backend
   environment:
@@ -35,7 +36,8 @@ x-common-service: &common-service
 
 services:
   playwright-service:
-    build: apps/playwright-service
+    # build: apps/playwright-service
+    image: ghcr.io/nuersir/firecrawl-service
     environment:
       - PORT=3000
       - PROXY_SERVER=${PROXY_SERVER}
