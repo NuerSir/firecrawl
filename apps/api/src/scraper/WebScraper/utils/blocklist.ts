@@ -1,3 +1,5 @@
+import { Logger } from "../../../lib/logger";
+
 const socialMediaBlocklist = [
   'facebook.com',
   'x.com',
@@ -13,6 +15,8 @@ const socialMediaBlocklist = [
   'whatsapp.com',
   'wechat.com',
   'telegram.org',
+  'researchhub.com',
+  'youtube.com'
 ];
 
 const allowedKeywords = [
@@ -59,7 +63,7 @@ export function isUrlBlocked(url: string): boolean {
     return isBlocked;
   } catch (e) {
     // If an error occurs (e.g., invalid URL), return false
-    console.error(`Error parsing the following URL: ${url}`);
+    Logger.error(`Error parsing the following URL: ${url}`);
     return false;
   }
 }

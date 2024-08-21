@@ -3,6 +3,7 @@ import { generateRequestParams } from "../single_url";
 import { fetchAndProcessPdf } from "../utils/pdfProcessor";
 import { universalTimeout } from "../global";
 import { ScrapingBeeClient } from "scrapingbee";
+import { Logger } from "../../../lib/logger";
 
 /**
  * Scrapes a URL with ScrapingBee
@@ -42,6 +43,9 @@ export async function scrapWithScrapingBee(
           transparent_status_code: "True",
         },
       });
+      Logger.info(
+        `⛏️ ScrapingBee: Scraping ${url}`
+      );
       const contentType = response.headers["content-type"];
       if (contentType && contentType.includes("application/pdf")) {
         logParams.success = true;
@@ -56,8 +60,8 @@ export async function scrapWithScrapingBee(
           text = decoder.decode(response.data);
           logParams.success = true;
         } catch (decodeError) {
-          console.error(
-            `[ScrapingBee][c] Error decoding response data for url: ${url} -> ${decodeError}`
+          Logger.debug(
+            `⛏️ ScrapingBee: Error decoding response data for url: ${url} | Error: ${decodeError}`
           );
           logParams.error_message = decodeError.message || decodeError;
         }
@@ -72,7 +76,7 @@ export async function scrapWithScrapingBee(
         };
       }
     } catch (error) {
-      console.error(`[ScrapingBee][c] Error fetching url: ${url} -> ${error}`);
+      Logger.debug(`⛏️ ScrapingBee: Error fetching url: ${url} | Error: ${error}`);
       logParams.error_message = error.message || error;
       logParams.response_code = error.response?.status;
       return {

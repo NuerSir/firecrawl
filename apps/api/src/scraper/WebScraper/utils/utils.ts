@@ -1,5 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { Logger } from "../../../lib/logger";
 
 
 export async function attemptScrapWithRequests(
@@ -9,13 +10,13 @@ export async function attemptScrapWithRequests(
     const response = await axios.get(urlToScrap, { timeout: 15000 });
 
     if (!response.data) {
-      console.log("Failed normal requests as well");
+      Logger.debug("Failed normal requests as well");
       return null;
     }
 
     return response.data;
   } catch (error) {
-    console.error(`Error in attemptScrapWithRequests: ${error}`);
+    Logger.debug(`Error in attemptScrapWithRequests: ${error}`);
     return null;
   }
 }
@@ -40,10 +41,10 @@ export function extractLinks(html: string, baseUrl: string): string[] {
         links.push(href);
       } else if (href.startsWith('/')) {
         // Relative URL starting with '/', append to origin
-        links.push(`${origin}${href}`);
+        links.push(new URL(href, baseUrl).href);
       } else if (!href.startsWith('#') && !href.startsWith('mailto:')) {
         // Relative URL not starting with '/', append to base URL
-        links.push(`${baseUrl}/${href}`);
+        links.push(new URL(href, baseUrl).href);
       } else if (href.startsWith('mailto:')) {
         // mailto: links, add as is
         links.push(href);
