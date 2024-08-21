@@ -47,7 +47,7 @@ services:
   api:
     <<: *common-service
     depends_on:
-      - redis
+      # - redis
       - playwright-service
     ports:
       - "3002:3002"
@@ -56,7 +56,7 @@ services:
   worker:
     <<: *common-service
     depends_on:
-      - redis
+      # - redis
       - playwright-service
       - api
     command: [ "pnpm", "run", "workers" ]
@@ -67,7 +67,7 @@ services:
   #     - backend
   #   command: redis-server --bind 0.0.0.0
 
-# networks:
-#   default:
-#     name: easypanel
-#     external: true
+networks:
+  default:
+    name: easypanel
+    external: true
