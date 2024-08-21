@@ -2,8 +2,8 @@ name: firecrawl
 
 x-common-service: &common-service
   build: apps/api
-  networks:
-    - backend
+  # networks:
+  #   - backend
   environment:
     - REDIS_URL=${REDIS_URL:-redis://redis:6379}
     - REDIS_RATE_LIMIT_URL=${REDIS_URL:-redis://redis:6379}
