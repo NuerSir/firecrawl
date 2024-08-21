@@ -1,0 +1,48 @@
+name: Docker FireCrawl Push
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  REPO_NAME: nuersir # 注意使用全小写
+  FIRECRAWL_SERVICE_NAME: firecrawl-service
+  FIRECRAWL_SVR_NAME: firecrawl-svr
+
+jobs:
+
+  build-and-push:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push ${{ env.FIRECRAWL_SERVICE_NAME }} image
+      uses: docker/build-push-action@v3
+      with:
+        context: ./apps/${{ env.FIRECRAWL_SERVICE_NAME }}
+        file: ./apps/playwright-service/Dockerfile
+        push: true
+        platforms: linux/amd64,linux/arm64
+        tags: ghcr.io/${{ env.REPO_NAME }}/${{ env.FIRECRAWL_SERVICE_NAME }}:latest
+    
+    - name: Build and push ${{ env.FIRECRAWL_SVR_NAME }} image
+      uses: docker/build-push-action@v3
+      with:
+        context: ./apps/${{ env.FIRECRAWL_SVR_NAME }}
+        file: ./apps/api/Dockerfile
+        push: true
+        platforms: linux/amd64,linux/arm64
+        tags: ghcr.io/${{ env.REPO_NAME }}/${{ env.FIRECRAWL_SVR_NAME }}:latest
