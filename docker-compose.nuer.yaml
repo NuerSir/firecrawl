@@ -2,6 +2,7 @@ name: firecrawl
 
 x-common-service: &common-service
   build: apps/api
+  image: firecrawl-svr
   # networks:
   #   - backend
   environment:
@@ -69,5 +70,8 @@ services:
 
 networks:
   default:
+    # easypanel 跨容器连接redis等基础容器使用
     name: easypanel
+    # 本机基础网络
+    # name: base_network
     external: true
