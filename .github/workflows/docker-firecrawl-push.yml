@@ -32,7 +32,7 @@ jobs:
     - name: Build and push ${{ env.FIRECRAWL_SERVICE_NAME }} image
       uses: docker/build-push-action@v3
       with:
-        context: ./apps/${{ env.FIRECRAWL_SERVICE_NAME }}
+        context: ./apps/playwright-service
         file: ./apps/playwright-service/Dockerfile
         push: true
         platforms: linux/amd64,linux/arm64
@@ -41,7 +41,7 @@ jobs:
     - name: Build and push ${{ env.FIRECRAWL_SVR_NAME }} image
       uses: docker/build-push-action@v3
       with:
-        context: ./apps/${{ env.FIRECRAWL_SVR_NAME }}
+        context: ./apps/api
         file: ./apps/api/Dockerfile
         push: true
         platforms: linux/amd64,linux/arm64
